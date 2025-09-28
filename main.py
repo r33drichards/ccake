@@ -123,10 +123,19 @@ def create_server():
                     is_optimal=True
                 ))
 
+            # Convert solve_time from timedelta to float (seconds)
+            solve_time_value = 0.0
+            if hasattr(result, 'statistics') and 'solveTime' in result.statistics:
+                solve_time = result.statistics['solveTime']
+                if hasattr(solve_time, 'total_seconds'):
+                    solve_time_value = solve_time.total_seconds()
+                else:
+                    solve_time_value = float(solve_time)
+
             return SolveResult(
                 solutions=solutions,
                 status=str(result.status),
-                solve_time=result.statistics.get('solveTime', 0) if hasattr(result, 'statistics') else 0,
+                solve_time=solve_time_value,
                 num_solutions=len(solutions),
                 error=None
             )
