@@ -1,10 +1,8 @@
-from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import minizinc
-import tempfile
-import json
+
 
 class ConstraintModel(BaseModel):
     """Model for constraint problem definition"""
@@ -148,60 +146,6 @@ def create_server():
                 num_solutions=0,
                 error=str(e)
             )
-
-    @mcp.tool()
-    async def list_solvers() -> List[SolverInfo]:
-        """
-        List all available MiniZinc solvers on the system.
-        """
-        solvers = []
-        try:
-            # Get all available solvers
-            for solver_id in minizinc.Solver.available():
-                try:
-                    solver = minizinc.Solver.lookup(solver_id)
-                    solvers.append(SolverInfo(
-                        id=solver.id,
-                        name=solver.name,
-                        version=solver.version,
-                        tags=solver.tags if hasattr(solver, 'tags') else []
-                    ))
-                except:
-                    # Skip if we can't load the solver info
-                    continue
-        except Exception as e:
-            # If MiniZinc is not installed, return an empty list
-            pass
-
-        return solvers
-
-    @mcp.tool()
-    async def validate_model(model_str: str) -> Dict[str, Any]:
-        """
-        Validate a MiniZinc model syntax without solving it.
-
-        Returns information about the model including variables, constraints,
-        and any syntax errors.
-        """
-        try:
-            model = minizinc.Model()
-            model.add_string(model_str)
-
-            # Try to create an instance with the default solver
-            solver = minizinc.Solver.lookup("gecode")
-            instance = minizinc.Instance(solver, model)
-
-            return {
-                "valid": True,
-                "error": None,
-                "message": "Model is syntactically valid"
-            }
-        except Exception as e:
-            return {
-                "valid": False,
-                "error": str(e),
-                "message": "Model validation failed"
-            }
 
 
     return mcp

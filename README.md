@@ -1,100 +1,73 @@
 # MiniZinc Constraint Solver MCP Server
 
-A Model Context Protocol (MCP) server that provides constraint solving capabilities using MiniZinc. This server allows you to solve various constraint satisfaction and optimization problems through a simple API.
+A Model Context Protocol (MCP) server that provides constraint solving capabilities using MiniZinc. This server exposes a single powerful tool for solving constraint satisfaction and optimization problems.
 
 ## Features
 
-The server provides the following constraint solving tools:
+The server provides one core tool:
 
-### Core Tools
+- **solve_constraint** - General purpose constraint solver that accepts any MiniZinc model with optional data parameters, solver selection, and timeout configuration
 
-1. **solve_constraint** - General purpose constraint solver that accepts any MiniZinc model
-2. **validate_model** - Validates MiniZinc model syntax without solving
-3. **list_solvers** - Lists all available MiniZinc solvers on the system
+## Usage Options
 
-### Specialized Problem Solvers
+### Option 1: Use Hosted Version (Recommended)
 
-1. **solve_nqueens** - Solves the N-Queens problem
-2. **solve_knapsack** - Solves 0/1 knapsack optimization problems
-3. **solve_sudoku** - Solves 9×9 Sudoku puzzles
-4. **solve_graph_coloring** - Solves graph coloring problems with optional color minimization
+The easiest way to get started is using our free hosted version at:
+```
+https://minizinc-mcp.up.railway.app/sse
+```
 
-## Prerequisites
+### Option 2: Self-Host with Docker
 
-- Python 3.8 or higher
-- MiniZinc 2.6 or higher (must be installed separately)
-
-### Installing MiniZinc
-
-Download and install MiniZinc from: https://www.minizinc.org/software.html
-
-Ensure the `minizinc` executable is in your system PATH.
-
-## Installation
-
-1. Clone this repository:
+Build and run locally:
 ```bash
 git clone <repository-url>
 cd ccake
+docker build -t minizinc-mcp .
+docker run -p 8000:8000 minizinc-mcp
 ```
 
-2. Install Python dependencies:
+### Option 3: Local Development
+
+Prerequisites:
+- Python 3.11+
+- MiniZinc 2.8+ (install from https://www.minizinc.org/software.html)
+
 ```bash
+git clone <repository-url>
+cd ccake
 pip install -r requirements.txt
-```
-
-## Usage
-
-### Running the Server
-
-```bash
 python main.py
 ```
 
-The server runs using SSE transport by default.
+# Usage with Claude 
 
-### Example: Solving N-Queens
+got to the [connectors settings page](https://claude.ai/settings/connectors)
 
-To solve the 4-Queens problem and get all solutions:
+click `Add Custom Connector` button 
 
-```python
-result = await solve_nqueens(n=4, all_solutions=True)
-```
+for name use "minizinc mcp" 
 
-### Example: Custom Constraint Model
+for url use:
+ 
+    https://minizinc-mcp.up.railway.app/sse
 
-You can solve any constraint problem by providing a MiniZinc model:
+## Example Usage
 
-```python
-problem = ConstraintModel(
-    model="""
-        var 1..10: x;
-        var 1..10: y;
-        constraint x + y = 15;
-        constraint x < y;
-        solve satisfy;
-    """,
-    solver="gecode"
-)
-result = await solve_constraint(problem)
-```
+Once configured, you can ask Claude to solve constraint problems:
 
-### Example: Knapsack Problem
+*"Solve the 4-Queens problem where 4 queens must be placed on a 4x4 chessboard so that no two queens attack each other"*
 
-```python
-result = await solve_knapsack(
-    weights=[2, 3, 4, 5],
-    values=[3, 4, 5, 6],
-    capacity=7
-)
-```
+*"Find the optimal solution to a knapsack problem with items having weights [2,3,4,5] and values [3,4,5,6] and capacity 7"*
+
+*"Solve this custom constraint: I need two variables x and y between 1 and 10 where x + y = 15 and x < y"*
 
 ## Response Format
 
-All solving tools return a `SolveResult` object containing:
+The solve_constraint tool returns a `SolveResult` object containing:
 - `solutions`: List of solutions found
 - `status`: Solving status (SATISFIED, OPTIMAL, UNSATISFIABLE, etc.)
-- `solve_time`: Time taken to solve
+- `solve_time`: Time taken to solve in seconds
 - `num_solutions`: Number of solutions found
 - `error`: Error message if solving failed
 
@@ -102,26 +75,6 @@ Each solution contains:
 - `variables`: Dictionary of variable names to values
 - `objective`: Objective value for optimization problems
 - `is_optimal`: Whether the solution is optimal
-
-## Available Solvers
-
-The server supports all MiniZinc-compatible solvers installed on your system. Common ones include:
-- Gecode (default)
-- Chuffed
-- OR-Tools
-- CBC
-
-Use `list_solvers()` to see all available solvers on your system.
-
-## Error Handling
-
-The server gracefully handles errors including:
-- Invalid MiniZinc syntax
-- Unsatisfiable constraints
-- Solver timeouts
-- Missing solver installations
-
-Errors are returned in the `error` field of the response.
 
 ## License
 
