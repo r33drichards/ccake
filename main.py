@@ -1,72 +1,187 @@
-import json
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+import minizinc
+import tempfile
+import json
 
-RECORDS = json.loads(Path(__file__).with_name("records.json").read_text())
-LOOKUP = {r["id"]: r for r in RECORDS}
+class ConstraintModel(BaseModel):
+    """Model for constraint problem definition"""
+    model: str  # MiniZinc model as string
+    data: Optional[Dict[str, Any]] = None  # Data parameters
+    solver: str = "gecode"  # Default solver
+    all_solutions: bool = False
+    timeout: Optional[int] = None  # Timeout in seconds
 
-class SearchResult(BaseModel):
+class Solution(BaseModel):
+    """Model for a single solution"""
+    variables: Dict[str, Any]
+    objective: Optional[float] = None
+    is_optimal: bool = False
+
+class SolveResult(BaseModel):
+    """Model for solving results"""
+    solutions: List[Solution]
+    status: str  # SATISFIED, OPTIMAL, UNSATISFIABLE, etc.
+    solve_time: float
+    num_solutions: int
+    error: Optional[str] = None
+
+class SolverInfo(BaseModel):
+    """Model for solver information"""
     id: str
-    title: str
-    text: str
-
-class SearchResultPage(BaseModel):
-    results: list[SearchResult]
-
-class FetchResult(BaseModel):
-    id: str
-    title: str
-    text: str
-    url: str | None = None
-    metadata: dict[str, str] | None = None
+    name: str
+    version: str
+    tags: List[str]
 
 def create_server():
-    mcp = FastMCP(name="Cupcake MCP", instructions="Search cupcake orders")
+    mcp = FastMCP(
+        name="MiniZinc Constraint Solver MCP",
+        instructions="Solve constraint satisfaction and optimization problems using MiniZinc"
+    )
 
     @mcp.tool()
-    async def search(query: str) -> SearchResultPage:
+    async def solve_constraint(problem: ConstraintModel) -> SolveResult:
         """
-        Search for cupcake orders – keyword match.
+        Solve a constraint satisfaction or optimization problem.
 
-        Returns a SearchResultPage containing a list of SearchResult items.
+        Provide a MiniZinc model as a string, optional data parameters,
+        and solver preferences. Returns solutions found.
+
+        Example model:
+        ```
+        int: n = 4;
+        array[1..n] of var 1..n: queens;
+        constraint alldifferent(queens);
+        constraint alldifferent(i in 1..n)(queens[i] + i);
+        constraint alldifferent(i in 1..n)(queens[i] - i);
+        solve satisfy;
+        ```
         """
-        toks = query.lower().split()
-        results: list[SearchResult] = []
-        for r in RECORDS:
-            hay = " ".join(
-                [
-                    r.get("title", ""),
-                    r.get("text", ""),
-                    " ".join(r.get("metadata", {}).values()),
-                ]
-            ).lower()
-            if any(t in hay for t in toks):
-                results.append(
-                    SearchResult(id=r["id"], title=r.get("title", ""), text=r.get("text", ""))
+        try:
+            # Look up the solver
+            solver = minizinc.Solver.lookup(problem.solver)
+
+            # Create a model from the string
+            model = minizinc.Model()
+            model.add_string(problem.model)
+
+            # Create an instance
+            instance = minizinc.Instance(solver, model)
+
+            # Add data parameters if provided
+            if problem.data:
+                for key, value in problem.data.items():
+                    instance[key] = value
+
+            # Solve the problem
+            if problem.timeout:
+                result = instance.solve(
+                    all_solutions=problem.all_solutions,
+                    timeout=minizinc.timedelta(seconds=problem.timeout)
                 )
+            else:
+                result = instance.solve(all_solutions=problem.all_solutions)
 
-        # Return the Pydantic model (FastMCP will serialise it for us)
-        return SearchResultPage(results=results)
+            # Process the results
+            solutions = []
+
+            if result.status == minizinc.Status.SATISFIED or result.status == minizinc.Status.ALL_SOLUTIONS:
+                if problem.all_solutions and hasattr(result, 'solution'):
+                    for sol in result.solution:
+                        sol_dict = {key: sol[key] for key in sol if not key.startswith('_')}
+                        solutions.append(Solution(
+                            variables=sol_dict,
+                            objective=sol.objective if hasattr(sol, 'objective') else None,
+                            is_optimal=False
+                        ))
+                elif result.solution:
+                    sol_dict = {key: result[key] for key in result.solution if not key.startswith('_')}
+                    solutions.append(Solution(
+                        variables=sol_dict,
+                        objective=result.objective if hasattr(result, 'objective') else None,
+                        is_optimal=result.status == minizinc.Status.OPTIMAL_SOLUTION
+                    ))
+            elif result.status == minizinc.Status.OPTIMAL_SOLUTION:
+                sol_dict = {key: result[key] for key in result.solution if not key.startswith('_')}
+                solutions.append(Solution(
+                    variables=sol_dict,
+                    objective=result.objective if hasattr(result, 'objective') else None,
+                    is_optimal=True
+                ))
+
+            return SolveResult(
+                solutions=solutions,
+                status=str(result.status),
+                solve_time=result.statistics.get('solveTime', 0) if hasattr(result, 'statistics') else 0,
+                num_solutions=len(solutions),
+                error=None
+            )
+
+        except Exception as e:
+            return SolveResult(
+                solutions=[],
+                status="ERROR",
+                solve_time=0,
+                num_solutions=0,
+                error=str(e)
+            )
 
     @mcp.tool()
-    async def fetch(id: str) -> FetchResult:
+    async def list_solvers() -> List[SolverInfo]:
         """
-        Fetch a cupcake order by ID.
-
-        Returns a FetchResult model.
+        List all available MiniZinc solvers on the system.
         """
-        if id not in LOOKUP:
-            raise ValueError("unknown id")
+        solvers = []
+        try:
+            # Get all available solvers
+            for solver_id in minizinc.Solver.available():
+                try:
+                    solver = minizinc.Solver.lookup(solver_id)
+                    solvers.append(SolverInfo(
+                        id=solver.id,
+                        name=solver.name,
+                        version=solver.version,
+                        tags=solver.tags if hasattr(solver, 'tags') else []
+                    ))
+                except:
+                    # Skip if we can't load the solver info
+                    continue
+        except Exception as e:
+            # If MiniZinc is not installed, return an empty list
+            pass
 
-        r = LOOKUP[id]
-        return FetchResult(
-            id=r["id"],
-            title=r.get("title", ""),
-            text=r.get("text", ""),
-            url=r.get("url"),
-            metadata=r.get("metadata"),
-        )
+        return solvers
+
+    @mcp.tool()
+    async def validate_model(model_str: str) -> Dict[str, Any]:
+        """
+        Validate a MiniZinc model syntax without solving it.
+
+        Returns information about the model including variables, constraints,
+        and any syntax errors.
+        """
+        try:
+            model = minizinc.Model()
+            model.add_string(model_str)
+
+            # Try to create an instance with the default solver
+            solver = minizinc.Solver.lookup("gecode")
+            instance = minizinc.Instance(solver, model)
+
+            return {
+                "valid": True,
+                "error": None,
+                "message": "Model is syntactically valid"
+            }
+        except Exception as e:
+            return {
+                "valid": False,
+                "error": str(e),
+                "message": "Model validation failed"
+            }
+
 
     return mcp
 

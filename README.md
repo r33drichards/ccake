@@ -1,90 +1,128 @@
-# Cupcake MCP Server + Wasmer
+# MiniZinc Constraint Solver MCP Server
 
-This example shows how to run a **Model Context Protocol (MCP) server** for ChatGPT on **Wasmer Edge**.
+A Model Context Protocol (MCP) server that provides constraint solving capabilities using MiniZinc. This server allows you to solve various constraint satisfaction and optimization problems through a simple API.
 
-> ℹ️ MCP servers connected to ChatGPT should expose at least **two tools**—`search` and `fetch`—so ChatGPT can both discover content and then retrieve specific items.
+## Features
 
-## Demo
+The server provides the following constraint solving tools:
 
-`https://mcp-chatgpt-starter.wasmer.app/sse`
+### Core Tools
 
-Add it to ChatGPT as a connector (no auth), and then just ask ChatGPT to interact with it:
+1. **solve_constraint** - General purpose constraint solver that accepts any MiniZinc model
+2. **validate_model** - Validates MiniZinc model syntax without solving
+3. **list_solvers** - Lists all available MiniZinc solvers on the system
 
-```
-How many cupcakes Alice ordered?
-```
+### Specialized Problem Solvers
 
-## How it Works
+1. **solve_nqueens** - Solves the N-Queens problem
+2. **solve_knapsack** - Solves 0/1 knapsack optimization problems
+3. **solve_sudoku** - Solves 9×9 Sudoku puzzles
+4. **solve_graph_coloring** - Solves graph coloring problems with optional color minimization
 
-All logic lives in **`server.py`**, but you can think of it in sections:
+## Prerequisites
 
-### Data Section
+- Python 3.8 or higher
+- MiniZinc 2.6 or higher (must be installed separately)
 
-The server loads cupcake records from a local `records.json` file and builds a lookup dictionary:
+### Installing MiniZinc
 
-```python
-RECORDS = json.loads(Path(__file__).with_name("records.json").read_text())
-LOOKUP = {r["id"]: r for r in RECORDS}
-```
+Download and install MiniZinc from: https://www.minizinc.org/software.html
 
-### Models Section
+Ensure the `minizinc` executable is in your system PATH.
 
-We define Pydantic models to structure responses:
+## Installation
 
-* `SearchResult` and `SearchResultPage` for search results.
-* `FetchResult` for full cupcake order details.
-
-### Tools Section
-
-Two MCP tools are exposed via `FastMCP`:
-
-* **`search(query: str)`**
-  Splits the query into tokens, performs keyword matching across `title`, `text`, and `metadata`, and returns a list of matching results.
-
-* **`fetch(id: str)`**
-  Retrieves a single cupcake order by ID from the lookup dictionary and returns full details, including optional `url` and `metadata`.
-
-### Entrypoint Section
-
-At the bottom of `server.py`, the app is created and run:
-
-```python
-app = create_server()
-
-if __name__ == "__main__":
-    app.run(transport="sse")
+1. Clone this repository:
+```bash
+git clone <repository-url>
+cd ccake
 ```
 
-The server uses **Server-Sent Events (SSE)** to communicate with ChatGPT’s MCP integration.
-
-## Running Locally
-
-Install dependencies:
-
+2. Install Python dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-Run the server:
+## Usage
+
+### Running the Server
 
 ```bash
-python server.py
+python main.py
 ```
 
-Your MCP server will now be running and ready for connections from an MCP client (like ChatGPT with MCP enabled).
+The server runs using SSE transport by default.
 
-## Example Tools in Action
+### Example: Solving N-Queens
 
-* **Search tool** (`search("red velvet")`)
-  Returns a list of cupcake orders that mention “red velvet.”
+To solve the 4-Queens problem and get all solutions:
 
-* **Fetch tool** (`fetch("42")`)
-  Returns the full details of order `42`, including text, metadata, and an optional URL.
+```python
+result = await solve_nqueens(n=4, all_solutions=True)
+```
 
-## Deploying to Wasmer Edge (Overview)
+### Example: Custom Constraint Model
 
-1. Include both `server.py` and `records.json` in your project.
-2. Deploy to Wasmer Edge, ensuring the entrypoint is `server.py`.
-3. Access it at:
-   `https://<your-subdomain>.wasmer.app/sse`
+You can solve any constraint problem by providing a MiniZinc model:
 
+```python
+problem = ConstraintModel(
+    model="""
+        var 1..10: x;
+        var 1..10: y;
+        constraint x + y = 15;
+        constraint x < y;
+        solve satisfy;
+    """,
+    solver="gecode"
+)
+result = await solve_constraint(problem)
+```
+
+### Example: Knapsack Problem
+
+```python
+result = await solve_knapsack(
+    weights=[2, 3, 4, 5],
+    values=[3, 4, 5, 6],
+    capacity=7
+)
+```
+
+## Response Format
+
+All solving tools return a `SolveResult` object containing:
+- `solutions`: List of solutions found
+- `status`: Solving status (SATISFIED, OPTIMAL, UNSATISFIABLE, etc.)
+- `solve_time`: Time taken to solve
+- `num_solutions`: Number of solutions found
+- `error`: Error message if solving failed
+
+Each solution contains:
+- `variables`: Dictionary of variable names to values
+- `objective`: Objective value for optimization problems
+- `is_optimal`: Whether the solution is optimal
+
+## Available Solvers
+
+The server supports all MiniZinc-compatible solvers installed on your system. Common ones include:
+- Gecode (default)
+- Chuffed
+- OR-Tools
+- CBC
+
+Use `list_solvers()` to see all available solvers on your system.
+
+## Error Handling
+
+The server gracefully handles errors including:
+- Invalid MiniZinc syntax
+- Unsatisfiable constraints
+- Solver timeouts
+- Missing solver installations
+
+Errors are returned in the `error` field of the response.
+
+## License
+
+MIT License - see LICENSE file for details.
