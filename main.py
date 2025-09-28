@@ -77,34 +77,45 @@ def create_server():
 
             # Solve the problem
             if problem.timeout:
-                result = instance.solve(
+                result = await instance.solve_async(
                     all_solutions=problem.all_solutions,
                     timeout=minizinc.timedelta(seconds=problem.timeout)
                 )
             else:
-                result = instance.solve(all_solutions=problem.all_solutions)
+                result = await instance.solve_async(all_solutions=problem.all_solutions)
 
             # Process the results
             solutions = []
 
             if result.status == minizinc.Status.SATISFIED or result.status == minizinc.Status.ALL_SOLUTIONS:
-                if problem.all_solutions and hasattr(result, 'solution'):
-                    for sol in result.solution:
-                        sol_dict = {key: sol[key] for key in sol if not key.startswith('_')}
+                if problem.all_solutions and result:
+                    # When all_solutions is True, result is iterable
+                    for sol in result:
+                        sol_dict = {}
+                        for key in sol.__dict__:
+                            if not key.startswith('_'):
+                                sol_dict[key] = sol.__dict__[key]
                         solutions.append(Solution(
                             variables=sol_dict,
                             objective=sol.objective if hasattr(sol, 'objective') else None,
                             is_optimal=False
                         ))
                 elif result.solution:
-                    sol_dict = {key: result[key] for key in result.solution if not key.startswith('_')}
+                    # Single solution case
+                    sol_dict = {}
+                    for key in result.solution.__dict__:
+                        if not key.startswith('_'):
+                            sol_dict[key] = result.solution.__dict__[key]
                     solutions.append(Solution(
                         variables=sol_dict,
                         objective=result.objective if hasattr(result, 'objective') else None,
                         is_optimal=result.status == minizinc.Status.OPTIMAL_SOLUTION
                     ))
             elif result.status == minizinc.Status.OPTIMAL_SOLUTION:
-                sol_dict = {key: result[key] for key in result.solution if not key.startswith('_')}
+                sol_dict = {}
+                for key in result.solution.__dict__:
+                    if not key.startswith('_'):
+                        sol_dict[key] = result.solution.__dict__[key]
                 solutions.append(Solution(
                     variables=sol_dict,
                     objective=result.objective if hasattr(result, 'objective') else None,
