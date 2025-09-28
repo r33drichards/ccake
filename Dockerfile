@@ -4,6 +4,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     wget \
     unzip \
+    libqt6printsupport6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install MiniZinc
