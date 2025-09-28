@@ -37,6 +37,7 @@ class SolverInfo(BaseModel):
 
 def create_server():
     mcp = FastMCP(
+        host="0.0.0.0",
         name="MiniZinc Constraint Solver MCP",
         instructions="Solve constraint satisfaction and optimization problems using MiniZinc"
     )
@@ -199,4 +200,4 @@ def create_server():
 app = create_server()
 
 if __name__ == "__main__":
-    app.run(transport="sse", host="0.0.0.0", port=8000)
+    app.run(transport="sse")   #, host="
