@@ -1,0 +1,74 @@
+name: Publish MCP Server
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          python -m pytest test_*.py -v
+
+      - name: Build package
+        run: |
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://upload.pypi.org/legacy/
+
+      - name: Install MCP Publisher
+        run: |
+          curl -sSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(curl -s https://api.github.com/repos/modelcontextprotocol/registry/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/v//')_linux_amd64.tar.gz | tar -xz
+          sudo mv mcp-publisher /usr/local/bin/
+
+      - name: Authenticate with MCP Registry
+        run: |
+          mcp-publisher login github
+
+      - name: Update server.json version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ -z "$VERSION" ]; then
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/g" server.json
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/g" pyproject.toml
+
+      - name: Publish to MCP Registry
+        run: |
+          mcp-publisher publish
+
+      - name: Verify publication
+        run: |
+          sleep 30
+          curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=ccake" | jq -r '.servers[] | select(.name == "io.github.r33drichards/ccake") | .name'
