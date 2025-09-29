@@ -34,8 +34,8 @@ Prerequisites:
 - MiniZinc 2.8+ (install from https://www.minizinc.org/software.html)
 
 ```bash
-git clone <repository-url>
-cd ccake
+git clone https://github.com/r33drichards/minizinc-mcp
+cd minizinc-mcp
 pip install -r requirements.txt
 python main.py
 ```
