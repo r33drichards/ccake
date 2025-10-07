@@ -2,6 +2,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import minizinc
+import datetime
 
 
 class ConstraintModel(BaseModel):
@@ -56,7 +57,7 @@ async def solve_constraint_core(problem: ConstraintModel) -> "SolveResult":
         if problem.timeout:
             result = await instance.solve_async(
                 all_solutions=problem.all_solutions,
-                timeout=minizinc.timedelta(seconds=problem.timeout)
+                timeout=datetime.timedelta(seconds=problem.timeout)
             )
         else:
             result = await instance.solve_async(all_solutions=problem.all_solutions)

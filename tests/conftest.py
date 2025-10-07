@@ -1,6 +1,10 @@
 import os
+import sys
 import pathlib
 import pytest
+
+# Ensure repository root is importable for `import main`
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 @pytest.fixture(autouse=True, scope="session")
 def minizinc_env():
