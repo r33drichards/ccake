@@ -79,3 +79,25 @@ Each solution contains:
 ## License
 
 MIT License - see LICENSE file for details.
+
+# Usage with Claude Code 
+
+```
+claude mcp add minizinc -t sse   https://minizinc-mcp.up.railway.app/sse
+```
+
+
+then to test run the command 
+```
+claude
+```
+
+in the input window prompt: 
+
+ Solve the 4-Queens problem where 4 queens must be placed on a 4x4 chessboard so that no two queens attack each other
+
+
+ and you should see an output similar to this:
+
+![alt text](image.png)
+
